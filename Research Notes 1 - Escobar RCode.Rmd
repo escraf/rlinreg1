@@ -1,0 +1,161 @@
+---
+title: "Research Notes 1 Escobar"
+author: "Rafael Escobar"
+date: "4/8/2021"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list=ls())
+```
+
+# Hypothesis
+BMI and health insurance type are related
+
+# Outcome: BMXBMI
+# Study variable: HealthInsurance
+# Confounders: Age, Male, Race/Ethnicity
+
+##improt libraries and data set
+```{r}
+library("stargazer")
+library("sas7bdat")
+library("haven")
+```
+
+## Read SAS data file
+```{r}
+nhanes =  read_spss("NHANES_RN1.sav")
+write.table(nhanes, file = "nhanes.txt",  sep = "\t")
+class(nhanes)
+dim(nhanes)
+names(nhanes)
+
+```
+
+
+## Create factor variable for Health Insurace and Race/Ethnicity
+
+```{r}
+Ins_levels <- attributes(nhanes$HealthInsurance)$labels
+nhanes$HealthInsurance_f <- factor(nhanes$HealthInsurance,
+    levels = Ins_levels, labels = names(Ins_levels))
+table(nhanes$HealthInsurance_f)
+Race_levels <- attributes(nhanes$RaceEthnicity1)$labels
+nhanes$Race_f <- factor(nhanes$RaceEthnicity1, levels = Race_levels, labels = names(Race_levels))
+```
+## Complete cases
+
+```{r}
+cc <- complete.cases(
+    nhanes[, c("BMXBMI", "Male", "agegroup", "HealthInsurance_f", "Race_f")]
+)
+nhanes_sub <- nhanes[cc, ]
+head(nhanes_sub)
+```
+
+### Polytomous Categorical Variable HealthInsurance to generate Binary Categorical Variable
+```{r}
+nhanes_sub$HealthInsurance_Private  <-  ifelse(nhanes_sub$HealthInsurance == 1, 1, 0)
+```
+
+### Looking at BMI
+```{r}
+summary(nhanes$BMXBMI)
+table(nhanes$HealthInsurance)
+dim(nhanes$HealthInsurance_f)
+hist(nhanes$BMXBMI, breaks = 25, col = "lightgray", xlab = "BMI (kg/m2)", main = "Distribution and Probability Plot for BMI")
+boxplot(nhanes$BMXBMI)
+qqnorm(nhanes$BMXBMI, ylab = "BMI (kg/m2)")
+qqline(nhanes$BMXBMI, col= "steelblue", lwd= 2)
+
+### Log Transformation of BMI to address skewness 
+nhanes_sub$logBMI <- log(nhanes_sub$BMXBMI)
+qqnorm(nhanes_sub$logBMI)
+qqline(nhanes_sub$logBMI, col = "steelblue", lwd = 2)
+hist(nhanes_sub$logBMI, breaks = 25, col = "lightgray", xlab = "LogBMI", main = "Distribution and Probablity Plot for logBMI")
+summary(nhanes_sub$logBMI)
+sd(nhanes_sub$logBMI)
+
+### observation of normality 
+plot(nhanes_sub$Exactage , nhanes_sub$BMXBMI, xlab = "Exact Age", ylab = "BMI (kg/m2)")
+plot(nhanes_sub$BMXBMI ~ nhanes_sub$Exactage, xlab= "Exact Age", ylab= "BMI (kg/m2)")
+plot(nhanes_sub$BMXBMI ~ nhanes_sub$agegroup,xlab= "Age Groups", ylab= "BMI (kg/m2)")
+plot(nhanes_sub$logBMI~ nhanes_sub$Exactage,xlab= "Exact Age", ylab= "LogBMI")
+plot(nhanes_sub$logBMI ~ nhanes_sub$agegroup, xlab= "Age Groups", ylab= "LogBMI")
+hist(nhanes_sub$Exactage, breaks = 25, col = "lightgray", xlab = "Exact Age", main = "Histogram of Exact Age")
+qqnorm(nhanes_sub$Exactage)
+hist(nhanes_sub$agegroup, breaks = 25, col = "lightgray", xlab = "Age Groups", main = "Histogram of Age Groups")
+boxplot(nhanes_sub$logBMI ~ nhanes_sub$agegroup, xlab= "Age Groups", ylab = "logBMI", main = "Distribution of logBMI by 'agegroup'")
+```
+
+#### Unadjusted Model
+
+```{r}
+unadjusted <- lm( logBMI ~ HealthInsurance_Private, data = nhanes_sub)
+stargazer(unadjusted, title="Unadjusted",
+   type="text", style="default", header=FALSE)
+```
+### Adjusted Model
+
+```{r}
+adjusted <- lm( logBMI ~ HealthInsurance_Private + RIAGENDR +  factor(agegroup) + Race_f, data= nhanes_sub)
+stargazer(adjusted, title="Adjusted",
+   type="text", style="default", header=TRUE, object.names = TRUE, covariate.labels = c("PrivateInsurance", "Male*", "20-24*", "25-29", "30-34", "35-39", "40-44", "45-49", "50-54", "Non-Hispanic White*", "Non-Hispanic Black", "Hispanic")
+                               )
+```
+### F-test between two models
+```{r}
+anova(adjusted, unadjusted)
+```
+
+
+##### Obtaining the fitted values and residual values:Unadjusted
+
+```{r}
+res <- residuals(unadjusted)
+yhat <- fitted(unadjusted)
+```
+### Plotting fitted vs residuals
+
+```{r}
+hist(res,breaks = 25, col = "lightgray", xlab = "Residuals", main = "Distribution and Probability Plot for Residuals")
+plot(yhat, res, xlab = "Predicted Y", ylab = "Resuduals")
+```
+
+##### Normality of Residuals
+
+### Quantile-Quantile Plot
+
+```{r}
+qqnorm(res)
+qqline(res, col = "steelblue", lwd = 2)
+```
+
+###### Obtaining the fitted values and residual values: Adjusted
+```{r}
+res2 <- residuals(adjusted)
+yhat2 <- fitted(adjusted)
+```
+### Plotting fitted vs residuals
+
+```{r}
+hist(res2,breaks = 25, col = "lightgray", xlab = "Residuals", main = "Distribution and Probability Plot for Residuals")
+plot(yhat2, res2, xlab = "Predicted Y", ylab = "Resuduals")
+```
+
+## Normality of Residuals
+
+To check for normality we can plot our distribution values (normal distribution)
+versus our residuals in a Q-Q plot.
+
+### Quantile-Quantile Plot
+
+```{r}
+qqnorm(res2)
+qqline(res2, col = "steelblue", lwd = 2)
+```
+
